@@ -1,0 +1,13 @@
+{
+  "$schema": "./mod.schema.json",
+  "version": "0.1.0",
+  "title": "Rewrite",
+  "place": "right",
+  "size": 368,
+  "overlay": {
+    "kind": "popup",
+    "width": 1,
+    "height": 1,
+    "frame": "none"
+  }
+}

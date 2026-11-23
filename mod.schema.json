@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rewrite mod.json",
+  "description": "What Herdr reads from Rewrite's mod.json, and the settings it takes.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "This file's schema, for editors."
+    },
+    "version": {
+      "type": "string",
+      "description": "The mod's version."
+    },
+    "title": {
+      "type": "string",
+      "description": "The mod's name, as Herdr shows it."
+    },
+    "place": {
+      "enum": ["left", "right", "top", "bottom", "none"],
+      "description": "Where Herdr first docks the mod. \"none\": only where a layout or another mod puts it."
+    },
+    "size": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Its first size, in pixels."
+    },
+    "focusable": {
+      "type": "boolean",
+      "description": "Lets pane.go give a shown copy the keyboard."
+    },
+    "overlay": {
+      "type": "object",
+      "description": "How mod.open shows it.",
+      "properties": {
+        "kind": {
+          "enum": ["dialog", "popup", "window"]
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        },
+        "frame": {
+          "enum": ["none"],
+          "description": "\"none\": no frame around it."
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "Your changes. A setting left out uses its default.",
+      "additionalProperties": false,
+      "properties": {
+        "panel": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "toggle": {
+              "title": "Key closes the panel",
+              "description": "Lets the panel key close an open panel, instead of leaving it alone.",
+              "type": "boolean",
+              "default": false
+            }
+          }
+        },
+        "history": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_items": {
+              "title": "History limit",
+              "description": "Maximum number of rewrite entries saved on disk.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        },
+        "ai": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "harness": {
+              "title": "Default agent",
+              "description": "auto uses the agent running in this tab, else the first installed.",
+              "type": "string",
+              "default": "auto",
+              "enum": ["auto", "claude", "antigravity", "copilot", "codex", "opencode"]
+            },
+            "effort": {
+              "title": "Effort",
+              "description": "Reasoning effort asked of every agent.",
+              "type": "string",
+              "default": "low",
+              "enum": ["low", "medium", "high"]
+            },
+            "timeout": {
+              "title": "Timeout",
+              "description": "How long to wait for the agent.",
+              "type": ["string", "integer"],
+              "format": "duration",
+              "pattern": "^\\s*\\d+(\\.\\d+)?\\s*(ms|s|m|h)\\s*$",
+              "default": "90s"
+            },
+            "max_input_chars": {
+              "title": "Max prompt characters",
+              "description": "Prompts longer than this are passed via a prompt file when supported.",
+              "type": "integer",
+              "minimum": 1000,
+              "x-step": 1000,
+              "default": 24000
+            },
+            "claude_model": {
+              "title": "Claude Code model",
+              "description": "Lightweight model for fast rewrites.",
+              "type": "string",
+              "default": "haiku"
+            },
+            "antigravity_model": {
+              "title": "Antigravity model",
+              "description": "An agy model id; the effort is appended when it has no suffix.",
+              "type": "string",
+              "default": "gemini-4-hydrogen"
+            },
+            "copilot_model": {
+              "title": "Copilot model",
+              "description": "Lightweight model for Copilot CLI.",
+              "type": "string",
+              "default": "gpt-6-luna"
+            },
+            "codex_model": {
+              "title": "Codex model",
+              "description": "Lightweight model for Codex CLI.",
+              "type": "string",
+              "default": "gpt-6-luna"
+            },
+            "opencode_model": {
+              "title": "OpenCode model",
+              "description": "provider/model",
+              "type": "string",
+              "default": "openrouter/openai/gpt-6-luna"
+            }
+          }
+        },
+        "rewrite_types": {
+          "type": "object",
+          "title": "Custom rewrite types",
+          "description": "Override built-in prompts or add custom rewrite types keyed by id.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "label": { "type": "string" },
+              "prompt": { "type": "string" }
+            },
+            "required": ["label", "prompt"]
+          }
+        }
+      }
+    }
+  }
+}

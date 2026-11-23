@@ -225,46 +225,46 @@ To wire the mod into a Herdr layout (e.g., `estro.json` in `dev-config`):
 
 ### Phase 1: Mod Scaffolding, Settings Schema & Panel Shell
 **Goal:** A loadable, valid Herdr right-side panel mod with all UI layout elements and state wiring (stubbed rewrite call).
-- Create `mod.json`, `mod.schema.json`, `jsconfig.json`, `settings.js`, `panel.js`, and SVG icons in `icons/`.
-- Build `views/ui.js` (Herdr theme tokens, `Panel`, `PanelHeader`, `Popover` dropdown, `IconButton`, `TextButton`, `ActionButton`, collapsible section).
-- Build `main.js` and `views/panel.js` with:
-  - Header controls (Harness dropdown, Auto-copy toggle, Clear button).
-  - Rewrite Type & Output Type dropdowns (`localStorage`-persisted).
-  - Collapsible, height-capped Context `TextareaState`.
-  - Main Rewrite `TextareaState` with `Ctrl+Enter` / `Cmd+Enter` handler and Rewrite button.
-  - Editable Output `TextareaState` with Copy and Re-rewrite buttons.
-- **Verification:** Load mod in Herdr (`herdr-app check` / reload), confirm panel renders cleanly at 368px width, dropdowns open/close, context box stays compact on large paste, and `mod.schema.json` validates `mod.json`.
+- [x] Create `mod.json`, `mod.schema.json`, `jsconfig.json`, `settings.js`, `panel.js`, and SVG icons in `icons/`.
+- [x] Build `views/ui.js` (Herdr theme tokens, `Panel`, `PanelHeader`, `Popover` dropdown, `IconButton`, `TextButton`, `ActionButton`, collapsible section).
+- [x] Build `main.js` and `views/panel.js` with:
+  - [x] Header controls (Harness dropdown, Auto-copy toggle, Clear button).
+  - [x] Rewrite Type & Output Type dropdowns (`localStorage`-persisted).
+  - [x] Collapsible, height-capped Context `TextareaState`.
+  - [x] Main Rewrite `TextareaState` with `Ctrl+Enter` / `Cmd+Enter` handler and Rewrite button.
+  - [x] Editable Output `TextareaState` with Copy and Re-rewrite buttons.
+- [x] **Verification:** Validate `mod.json` / `mod.schema.json` JSON and JS syntax (`node --check`). *(Runtime Herdr UI load pending user install/check.)*
 
 ### Phase 2: Prompt Engine & Multi-Harness AI Runner
 **Goal:** End-to-end live rewriting using your installed coding-agent CLI harnesses.
-- Implement `prompts.js` with the 3 v1 Rewrite Types (`default`, `professionalize`, `answer-questions`), 5 Output Types, and support for custom types from `mod.json` `settings`.
-- Implement `ai.js` supporting `auto`, `claude`, `antigravity`, `copilot`, `codex`, and `opencode` (verifying `codex` CLI non-interactive flags on this machine during implementation).
-- Wire `RewriteView.runRewrite(cx)` with busy/spinner state, error banner display, and response sanitization.
-- **Verification:** Test each Rewrite Type (especially *Answer Questions* with out-of-order dictated answers + Context questions) and verify harness auto-detection, explicit harness override, and clean error reporting when a harness fails or times out.
+- [x] Implement `prompts.js` with the 3 v1 Rewrite Types (`default`, `professionalize`, `answer-questions`), 5 Output Types, and support for custom types from `mod.json` `settings`.
+- [x] Implement `ai.js` supporting `auto`, `claude`, `antigravity`, `copilot`, `codex`, and `opencode` (verified installed `claude`, `agy`, `copilot`, `opencode` and `codex exec` flags).
+- [x] Wire `RewriteView.runRewrite(cx)` with busy/spinner state, error banner display, and response sanitization.
+- [ ] **Verification:** Test each Rewrite Type (especially *Answer Questions* with out-of-order dictated answers + Context questions) in Herdr and verify harness auto-detection, explicit harness override, and clean error reporting when a harness fails or times out. *(Syntax & `prompts.js` unit check passed; live Herdr runtime test pending.)*
 
 ### Phase 3: Output Formatting & Windows Outlook Rich Copy
 **Goal:** Accurate output formatting across all 5 Output Types and working rich-text paste into Outlook.
-- Implement `clipboard.js`:
-  - Plain-text copy via `cx.write_to_clipboard()`.
-  - Deterministic Markdown → Outlook-safe HTML converter.
-  - Windows `CF_HTML` + `CF_UNICODETEXT` clipboard writer via PowerShell `DataObject`, with automatic fallback to plain text.
-- Wire Auto-copy on complete toggle and Copy button visual feedback (`Copied`).
-- **Verification:** Copy an `Outlook Rich Text` output and paste directly into Outlook/Word (verify bold, headings, and bullet lists render cleanly) and into Notepad (verify clean plain-text fallback). Verify `Obsidian Checklist` produces valid `- [ ]` tasks and `Outlook Plain Text` has no raw Markdown tokens.
+- [x] Implement `format.js`, `clipboard.js`, and `copy-rich.ps1`:
+  - [x] Plain-text copy via `cx.write_to_clipboard()`.
+  - [x] Deterministic Markdown → Outlook-safe HTML converter (`markdownToHtml`) and plain-text stripper (`markdownToPlainText`).
+  - [x] Windows `CF_HTML` + `CF_UNICODETEXT` clipboard writer via PowerShell `DataObject`, with automatic fallback to plain text.
+- [x] Wire Auto-copy on complete toggle and Copy button visual feedback (`Copied`).
+- [ ] **Verification:** Copy an `Outlook Rich Text` output in Herdr and paste directly into Outlook/Word (verify bold, headings, and bullet lists render cleanly) and into Notepad (verify clean plain-text fallback). Verify `Obsidian Checklist` produces valid `- [ ]` tasks and `Outlook Plain Text` has no raw Markdown tokens. *(Syntax & `format.js` unit check passed; live Outlook paste test pending.)*
 
 ### Phase 4: Persistent History & Iteration Workflows
 **Goal:** Full 20-item disk-backed history with expand, copy, load-back, re-rewrite, delete, and clear-all.
-- Implement `history.js` reading/writing `${appHome()}/data/rewrite/history.json` with atomic-safe writes, 20-item cap, and entry deletion.
-- Build the History list UI in `views/panel.js`:
-  - Collapsed preview rows with quick Copy icon.
-  - Expanded view showing the full rewritten response and `Copy` / `Load` / `Re-rewrite` / `Delete` actions.
-  - `Clear All` with two-step confirmation.
-- **Verification:** Run multiple rewrites, reload Herdr, confirm history persists; test Load restoring context/input/options/output; test Re-rewrite from both the output box and a history item; verify cap enforces 20 items cleanly.
+- [x] Implement `history.js` reading/writing `${appHome()}/data/rewrite/history.json` with atomic-safe writes, 20-item cap, and entry deletion.
+- [x] Build the History list UI in `views/panel.js`:
+  - [x] Collapsed preview rows with quick Copy icon.
+  - [x] Expanded view showing the full rewritten response and `Copy` / `Load` / `Re-rewrite` / `Delete` actions.
+  - [x] `Clear All` with two-step confirmation.
+- [ ] **Verification:** Run multiple rewrites, reload Herdr, confirm history persists; test Load restoring context/input/options/output; test Re-rewrite from both the output box and a history item; verify cap enforces 20 items cleanly. *(Syntax & `history.js` disk/cap unit check passed; live Herdr test pending.)*
 
 ### Phase 5: Polish, Edge Cases & Documentation
 **Goal:** Production-ready standalone mod.
-- Handle edge cases: rapid double-submit protection, very long context inputs, empty/whitespace inputs, missing `data/rewrite` folder on fresh install, theme switching (light & dark themes).
-- Add unit tests (Node test runner) for pure modules: `prompts.js`, `ai.js` (`harnessOrder`, `cleanOutput`), `clipboard.js` (Markdown→HTML & `CF_HTML` byte offsets), `history.js`, and `panel.js`.
-- Write a complete `README.md` with install steps, layout JSON snippet, and `mod.json` settings reference.
+- [x] Handle edge cases: rapid double-submit protection (`this.busy`), long context truncation, empty/whitespace input guards, missing `data/rewrite` folder creation, and theme-token styling.
+- [x] Add unit tests (Node test runner in `tests/rewrite.test.mjs`) for pure modules: `prompts.js`, `ai-core.js` (`harnessOrder`, `cleanOutput`), `format.js` (Markdown→HTML, plain text & `CF_HTML` byte offsets), `history.js`, `panel.js`, and `settings-core.js`.
+- [x] Write a complete `README.md` with install steps, layout JSON snippet, and `mod.json` settings reference.
 
 ---
 
