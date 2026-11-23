@@ -94,3 +94,8 @@ Run the Node unit test suite:
 ```powershell
 node --test tests/rewrite.test.mjs
 ```
+
+## License & Provenance
+
+- **License:** [MIT](LICENSE)
+- **Third-Party Notices:** [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — credits `munza/herdr-mods` (`better-changes`, Apache-2.0) for the adapted Herdr panel/settings/UI primitives and Lucide (`lucide-static`, ISC) for the SVG icons.
