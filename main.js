@@ -4,8 +4,8 @@ import { TextareaState } from "gpui-base";
 import { props, nextCommand, layout, run, notify, closeOverlay, appHome } from "herdr";
 import { loadSettings } from "./settings.js";
 import { panelCommands } from "./panel.js";
-import { buildPrompt } from "./prompts.js";
-import { runRewritePrompt } from "./ai.js";
+import { REWRITE_TYPES, OUTPUT_TYPES, buildBoundedPrompt } from "./prompts.js";
+import { HARNESSES, HARNESS_ORDER, runRewritePrompt } from "./ai.js";
 import { copyFormatted } from "./clipboard.js";
 import {
   createHistoryEntry,
@@ -33,28 +33,19 @@ export const DEFAULT_SETTINGS = {
   rewrite_types: {},
 };
 
-const BUILTIN_REWRITE_TYPES = [
-  { id: "default", label: "Default", summary: "Grammar, spelling & clarity" },
-  { id: "professionalize", label: "Professionalize", summary: "Polished email/Teams/doc tone" },
-  { id: "answer-questions", label: "Answer Questions", summary: "Pair dictated answers to questions" },
-];
+const BUILTIN_OUTPUT_TYPES = Object.values(OUTPUT_TYPES).map(({ id, label, summary }) => ({
+  id,
+  label,
+  summary,
+}));
 
-const BUILTIN_OUTPUT_TYPES = [
-  { id: "markdown", label: "Markdown", summary: "Standard Markdown" },
-  { id: "plain-text", label: "Plain Text", summary: "Clean text, no Markdown" },
-  { id: "obsidian-checklist", label: "Obsidian Checklist", summary: "Markdown tasks (- [ ])" },
-  { id: "outlook-plain", label: "Outlook Plain Text", summary: "Email-ready plain text" },
-  { id: "outlook-rich", label: "Outlook Rich Text", summary: "Copies rich HTML for Outlook" },
-];
-
-const HARNESS_OPTIONS = [
-  { id: "auto", label: "Auto", detail: "Active tab agent, else first installed" },
-  { id: "claude", label: "Claude", detail: "Claude Code (haiku)" },
-  { id: "antigravity", label: "Antigravity", detail: "agy (gemini-4-hydrogen)" },
-  { id: "copilot", label: "Copilot", detail: "Copilot CLI (gpt-6-luna)" },
-  { id: "codex", label: "Codex", detail: "Codex CLI (gpt-6-luna)" },
-  { id: "opencode", label: "OpenCode", detail: "OpenCode (gpt-6-luna)" },
-];
+const STORAGE = {
+  rewriteType: "rewrite.type",
+  outputType: "rewrite.output",
+  harness: "rewrite.harness",
+  autoCopy: "rewrite.auto-copy",
+  contextOpen: "rewrite.context-open",
+};
 
 class RewriteView extends View {
   init(given, cx) {
@@ -68,6 +59,7 @@ class RewriteView extends View {
     this.mode = p.mode ?? "sidebar";
     this.settings = DEFAULT_SETTINGS;
     this.busy = false;
+    this.inputRevision = 0;
     this.error = null;
     this.note = null;
     this.copiedAt = 0;
@@ -76,11 +68,11 @@ class RewriteView extends View {
     this.expandedHistoryId = null;
     this.confirmClearHistory = false;
 
-    this.rewriteType = localStorage.getItem("rewrite-type") ?? "default";
-    this.outputType = localStorage.getItem("output-type") ?? "markdown";
-    this.harness = localStorage.getItem("harness") ?? "auto";
-    this.autoCopy = localStorage.getItem("auto-copy") === "true";
-    this.contextOpen = localStorage.getItem("context-open") === "true";
+    this.rewriteType = localStorage.getItem(STORAGE.rewriteType) ?? "default";
+    this.outputType = localStorage.getItem(STORAGE.outputType) ?? "markdown";
+    this.harness = localStorage.getItem(STORAGE.harness) ?? "auto";
+    this.autoCopy = localStorage.getItem(STORAGE.autoCopy) === "true";
+    this.contextOpen = localStorage.getItem(STORAGE.contextOpen) === "true";
 
     this.harnessMenuOpen = false;
     this.harnessMenuFocus = cx.focus_handle();
@@ -96,62 +88,46 @@ class RewriteView extends View {
     });
   }
 
+  createTextField(cx, { placeholder, rows, textKey, focusKey, bumpRevision = false }) {
+    this[textKey] = "";
+    this[focusKey] = false;
+    const state = TextareaState.new({ placeholder, rows });
+    state.on("change", (_e, cx) => {
+      this[textKey] = state.value();
+      if (bumpRevision) this.inputRevision++;
+      cx.notify();
+    });
+    state.on("focus", (_e, cx) => {
+      this[focusKey] = true;
+      cx.notify();
+    });
+    state.on("blur", (_e, cx) => {
+      this[focusKey] = false;
+      cx.notify();
+    });
+    return state;
+  }
+
   initInputs(cx) {
-    this.contextText = "";
-    this.contextFocused = false;
-    this.contextInput = TextareaState.new({
+    this.contextInput = this.createTextField(cx, {
       placeholder: "Optional context (e.g. questions list, email thread)...",
       rows: 3,
+      textKey: "contextText",
+      focusKey: "contextFocused",
+      bumpRevision: true,
     });
-    this.contextInput.on("change", (_e, cx) => {
-      this.contextText = this.contextInput.value();
-      cx.notify();
-    });
-    this.contextInput.on("focus", (_e, cx) => {
-      this.contextFocused = true;
-      cx.notify();
-    });
-    this.contextInput.on("blur", (_e, cx) => {
-      this.contextFocused = false;
-      cx.notify();
-    });
-
-    this.inputText = "";
-    this.inputFocused = false;
-    this.input = TextareaState.new({
+    this.input = this.createTextField(cx, {
       placeholder: "Paste or dictate text to rewrite...",
       rows: 5,
+      textKey: "inputText",
+      focusKey: "inputFocused",
+      bumpRevision: true,
     });
-    this.input.on("change", (_e, cx) => {
-      this.inputText = this.input.value();
-      cx.notify();
-    });
-    this.input.on("focus", (_e, cx) => {
-      this.inputFocused = true;
-      cx.notify();
-    });
-    this.input.on("blur", (_e, cx) => {
-      this.inputFocused = false;
-      cx.notify();
-    });
-
-    this.outputText = "";
-    this.outputFocused = false;
-    this.outputInput = TextareaState.new({
+    this.outputInput = this.createTextField(cx, {
       placeholder: "Rewritten output will appear here (editable)...",
       rows: 6,
-    });
-    this.outputInput.on("change", (_e, cx) => {
-      this.outputText = this.outputInput.value();
-      cx.notify();
-    });
-    this.outputInput.on("focus", (_e, cx) => {
-      this.outputFocused = true;
-      cx.notify();
-    });
-    this.outputInput.on("blur", (_e, cx) => {
-      this.outputFocused = false;
-      cx.notify();
+      textKey: "outputText",
+      focusKey: "outputFocused",
     });
   }
 
@@ -173,11 +149,19 @@ class RewriteView extends View {
       const { settings, problems } = await loadSettings("rewrite", DEFAULT_SETTINGS);
       for (const problem of problems) console.warn(`rewrite mod.json settings: ${problem}`);
       this.settings = settings;
-      if (!localStorage.getItem("harness") && settings.ai?.harness) {
+
+      const storedHarness = localStorage.getItem(STORAGE.harness);
+      if ((!storedHarness || storedHarness === "auto") && settings.ai?.harness) {
         this.harness = settings.ai.harness;
       }
+
       const maxItems = settings.history?.max_items ?? 20;
-      this.history = await loadHistory(`${appHome()}/data/rewrite`, maxItems);
+      const loaded = await loadHistory(`${appHome()}/data/rewrite`, maxItems);
+      if (loaded.length) {
+        const existingIds = new Set(this.history.map((h) => h.id));
+        const merged = [...this.history, ...loaded.filter((h) => !existingIds.has(h.id))];
+        this.history = merged.slice(0, maxItems);
+      }
       cx.notify();
     });
   }
@@ -189,15 +173,15 @@ class RewriteView extends View {
   }
 
   availableRewriteTypes() {
-    const custom = Object.entries(this.settings?.rewrite_types ?? {}).map(([id, def]) => ({
+    const merged = Object.values(REWRITE_TYPES).map(({ id, label, summary }) => ({
       id,
-      label: def.label,
-      summary: "Custom prompt",
+      label,
+      summary,
     }));
-    const merged = [...BUILTIN_REWRITE_TYPES];
-    for (const item of custom) {
-      const idx = merged.findIndex((m) => m.id === item.id);
-      if (idx >= 0) merged[idx] = { ...merged[idx], ...item };
+    for (const [id, def] of Object.entries(this.settings?.rewrite_types ?? {})) {
+      const item = { id, label: def.label, summary: "Custom prompt" };
+      const idx = merged.findIndex((m) => m.id === id);
+      if (idx >= 0) merged[idx] = item;
       else merged.push(item);
     }
     return merged;
@@ -208,40 +192,54 @@ class RewriteView extends View {
   }
 
   harnessOptions() {
-    return HARNESS_OPTIONS;
+    const ai = this.settings?.ai ?? DEFAULT_SETTINGS.ai;
+    return [
+      { id: "auto", label: "Auto", detail: "Active tab agent, else first installed" },
+      ...HARNESS_ORDER.map((id) => {
+        const h = HARNESSES[id];
+        const model = ai[`${id}_model`];
+        return {
+          id,
+          label: h.shortLabel,
+          detail: model ? `${h.detail} (${model})` : h.detail,
+        };
+      }),
+    ];
   }
 
   harnessLabel(id) {
-    return HARNESS_OPTIONS.find((h) => h.id === id)?.label ?? "Auto";
+    if (id === "auto") return "Auto";
+    return HARNESSES[id]?.shortLabel ?? "Auto";
   }
 
   setRewriteType(id, cx) {
     this.rewriteType = id;
-    localStorage.setItem("rewrite-type", id);
+    localStorage.setItem(STORAGE.rewriteType, id);
     cx.notify();
   }
 
   setOutputType(id, cx) {
     this.outputType = id;
-    localStorage.setItem("output-type", id);
+    localStorage.setItem(STORAGE.outputType, id);
     cx.notify();
   }
 
   setHarness(id, cx) {
     this.harness = id;
-    localStorage.setItem("harness", id);
+    if (id === "auto") localStorage.removeItem(STORAGE.harness);
+    else localStorage.setItem(STORAGE.harness, id);
     cx.notify();
   }
 
   toggleAutoCopy(cx) {
     this.autoCopy = !this.autoCopy;
-    localStorage.setItem("auto-copy", String(this.autoCopy));
+    localStorage.setItem(STORAGE.autoCopy, String(this.autoCopy));
     cx.notify();
   }
 
   toggleContext(cx) {
     this.contextOpen = !this.contextOpen;
-    localStorage.setItem("context-open", String(this.contextOpen));
+    localStorage.setItem(STORAGE.contextOpen, String(this.contextOpen));
     cx.notify();
   }
 
@@ -250,18 +248,22 @@ class RewriteView extends View {
   }
 
   clearContext(cx) {
+    if (this.busy) return;
     this.contextText = "";
     this.contextInput.set_value("");
+    this.inputRevision++;
     cx.notify();
   }
 
   clearEditor(cx) {
+    if (this.busy) return;
     this.contextText = "";
     this.contextInput.set_value("");
     this.inputText = "";
     this.input.set_value("");
     this.outputText = "";
     this.outputInput.set_value("");
+    this.inputRevision++;
     this.error = null;
     this.note = null;
     cx.notify();
@@ -270,21 +272,25 @@ class RewriteView extends View {
   copyOutput(cx, text = this.outputText, outputType = this.outputType) {
     if (!String(text ?? "").trim()) return;
     const token = Date.now();
-    this.copiedAt = token;
-    cx.notify();
-
     cx.spawn(async (cx) => {
-      const res = await copyFormatted(text, outputType, cx);
-      if (res.fallback) {
-        this.note = "Rich copy unavailable; copied plain text instead.";
-      }
-      cx.notify();
-      cx.timer.after(1500, (cx) => {
-        if (this.copiedAt === token) {
-          this.copiedAt = 0;
-          cx.notify();
+      try {
+        const res = await copyFormatted(text, outputType, cx);
+        this.copiedAt = token;
+        if (res.fallback) {
+          this.note = "Rich copy unavailable; copied plain text instead.";
         }
-      });
+        cx.notify();
+        cx.timer.after(1500, (cx) => {
+          if (this.copiedAt === token) {
+            this.copiedAt = 0;
+            cx.notify();
+          }
+        });
+      } catch (error) {
+        this.copiedAt = 0;
+        this.error = `Copy failed: ${error.message}`;
+        cx.notify();
+      }
     });
   }
 
@@ -292,27 +298,39 @@ class RewriteView extends View {
     if (!this.outputText.trim() || this.busy) return;
     this.inputText = this.outputText;
     this.input.set_value(this.outputText);
+    this.inputRevision++;
     this.runRewrite(cx);
   }
 
   runRewrite(cx) {
     const raw = this.inputText.trim();
     if (!raw || this.busy) return;
+
+    const aiSettings = this.settings?.ai ?? DEFAULT_SETTINGS.ai;
+    const maxChars = Math.max(1000, aiSettings.max_input_chars ?? 24000);
+    let built;
+    try {
+      built = buildBoundedPrompt({
+        rewriteType: this.rewriteType,
+        outputType: this.outputType,
+        context: this.contextText,
+        input: raw,
+        customRewriteTypes: this.settings?.rewrite_types,
+        maxChars,
+      });
+    } catch (error) {
+      this.error = error.message;
+      cx.notify();
+      return;
+    }
+
     this.busy = true;
     this.error = null;
-    this.note = null;
+    this.note = built.contextTruncated ? "Context was trimmed to fit the prompt character limit." : null;
     cx.notify();
 
-    const prompt = buildPrompt({
-      rewriteType: this.rewriteType,
-      outputType: this.outputType,
-      context: this.contextText,
-      input: raw,
-      customRewriteTypes: this.settings?.rewrite_types,
-    });
-    const harnessSetting = this.harness || this.settings?.ai?.harness || "auto";
-    const aiSettings = this.settings?.ai ?? DEFAULT_SETTINGS.ai;
-
+    const revision = this.inputRevision;
+    const harnessSetting = this.harness || aiSettings.harness || "auto";
     const snapshot = {
       rewriteType: this.rewriteType,
       outputType: this.outputType,
@@ -322,17 +340,24 @@ class RewriteView extends View {
 
     cx.spawn(async (cx) => {
       try {
-        const result = await runRewritePrompt({ prompt, harnessSetting, aiSettings });
-        this.outputText = result.text;
-        this.outputInput.set_value(result.text);
-        this.note = `Rewritten with ${result.label} (${result.model})`;
-        await this.recordHistory({
+        const result = await runRewritePrompt({ prompt: built.prompt, harnessSetting, aiSettings });
+        const historySaved = await this.recordHistory({
           ...snapshot,
           harness: result.harness,
           model: result.model,
           output: result.text,
         });
-        if (this.autoCopy) this.copyOutput(cx);
+        if (this.inputRevision !== revision) {
+          this.note = "Input changed while rewriting; result saved to history.";
+          return;
+        }
+        this.outputText = result.text;
+        this.outputInput.set_value(result.text);
+        const notes = [`Rewritten with ${result.label} (${result.model})`];
+        if (built.contextTruncated) notes.push("context trimmed");
+        if (!historySaved) notes.push("history save failed");
+        this.note = notes.join(" · ");
+        if (this.autoCopy) this.copyOutput(cx, result.text, snapshot.outputType);
       } catch (error) {
         this.error = `Rewrite failed: ${error.message}`;
       } finally {
@@ -348,8 +373,10 @@ class RewriteView extends View {
     this.history = addHistoryEntry(this.history, entry, maxItems);
     try {
       await saveHistory(`${appHome()}/data/rewrite`, this.history);
+      return true;
     } catch (error) {
       console.warn(`Failed to save rewrite history: ${error.message}`);
+      return false;
     }
   }
 
@@ -359,32 +386,42 @@ class RewriteView extends View {
   }
 
   copyHistoryItem(item, cx) {
-    if (!item?.output?.trim()) return;
-    this.copiedHistoryId = item.id;
-    cx.notify();
+    if (!String(item?.output ?? "").trim()) return;
     cx.spawn(async (cx) => {
-      await copyFormatted(item.output, item.outputType, cx);
-      cx.timer.after(1500, (cx) => {
-        if (this.copiedHistoryId === item.id) {
-          this.copiedHistoryId = null;
-          cx.notify();
+      try {
+        const res = await copyFormatted(item.output, item.outputType, cx);
+        this.copiedHistoryId = item.id;
+        if (res.fallback) {
+          this.note = "Rich copy unavailable; copied plain text instead.";
         }
-      });
+        cx.notify();
+        cx.timer.after(1500, (cx) => {
+          if (this.copiedHistoryId === item.id) {
+            this.copiedHistoryId = null;
+            cx.notify();
+          }
+        });
+      } catch (error) {
+        this.copiedHistoryId = null;
+        this.error = `Copy failed: ${error.message}`;
+        cx.notify();
+      }
     });
   }
 
   loadHistoryItem(item, cx) {
-    if (!item) return;
+    if (!item || this.busy) return;
     this.contextText = item.context ?? "";
     this.contextInput.set_value(this.contextText);
     if (this.contextText.trim()) {
       this.contextOpen = true;
-      localStorage.setItem("context-open", "true");
+      localStorage.setItem(STORAGE.contextOpen, "true");
     }
     this.inputText = item.input ?? "";
     this.input.set_value(this.inputText);
     this.outputText = item.output ?? "";
     this.outputInput.set_value(this.outputText);
+    this.inputRevision++;
 
     if (item.rewriteType) this.setRewriteType(item.rewriteType, cx);
     if (item.outputType) this.setOutputType(item.outputType, cx);
@@ -403,10 +440,13 @@ class RewriteView extends View {
     this.history = removeHistoryEntry(this.history, id);
     if (this.expandedHistoryId === id) this.expandedHistoryId = null;
     cx.notify();
-    cx.spawn(async () => {
-      await saveHistory(`${appHome()}/data/rewrite`, this.history).catch((e) =>
-        console.warn(`Failed to save rewrite history: ${e.message}`),
-      );
+    cx.spawn(async (cx) => {
+      try {
+        await saveHistory(`${appHome()}/data/rewrite`, this.history);
+      } catch (e) {
+        this.note = `Failed to save history: ${e.message}`;
+        cx.notify();
+      }
     });
   }
 
@@ -427,10 +467,13 @@ class RewriteView extends View {
     this.history = [];
     this.expandedHistoryId = null;
     cx.notify();
-    cx.spawn(async () => {
-      await saveHistory(`${appHome()}/data/rewrite`, []).catch((e) =>
-        console.warn(`Failed to clear rewrite history: ${e.message}`),
-      );
+    cx.spawn(async (cx) => {
+      try {
+        await saveHistory(`${appHome()}/data/rewrite`, []);
+      } catch (e) {
+        this.note = `Failed to clear history: ${e.message}`;
+        cx.notify();
+      }
     });
   }
 }

@@ -3,6 +3,8 @@
 export const HARNESSES = {
   claude: {
     label: "Claude Code",
+    shortLabel: "Claude",
+    detail: "Claude Code",
     command: "claude",
     keys: ["claude", "claude-code"],
     args: ({ model, effort, text }) => [
@@ -23,6 +25,8 @@ export const HARNESSES = {
   },
   antigravity: {
     label: "Antigravity",
+    shortLabel: "Antigravity",
+    detail: "agy CLI",
     command: "agy",
     keys: ["antigravity", "agy"],
     args: ({ model, effort, text }) => [
@@ -38,6 +42,8 @@ export const HARNESSES = {
   },
   copilot: {
     label: "Copilot",
+    shortLabel: "Copilot",
+    detail: "Copilot CLI",
     command: "copilot",
     keys: ["copilot"],
     args: ({ model, effort, text }) => [
@@ -57,6 +63,8 @@ export const HARNESSES = {
   },
   codex: {
     label: "Codex",
+    shortLabel: "Codex",
+    detail: "Codex CLI",
     command: "codex",
     keys: ["codex"],
     args: ({ model, effort, text }) => [
@@ -73,6 +81,8 @@ export const HARNESSES = {
   },
   opencode: {
     label: "OpenCode",
+    shortLabel: "OpenCode",
+    detail: "OpenCode CLI",
     command: "opencode",
     keys: ["opencode"],
     needsFile: true,
@@ -108,12 +118,15 @@ export function harnessOrder(configured, tabPanes = []) {
 }
 
 export function cleanOutput(raw) {
-  let text = String(raw ?? "")
+  const text = String(raw ?? "")
     .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "")
     .replace(/\r/g, "");
   const lines = text.split("\n");
   while (lines.length && (/^\s*$/.test(lines[0]) || /^>\s+\S+\s+·\s+/.test(lines[0]))) {
     lines.shift();
+  }
+  while (lines.length && /^\s*$/.test(lines[lines.length - 1])) {
+    lines.pop();
   }
   if (lines.length >= 2 && /^\s*```[a-zA-Z0-9_-]*\s*$/.test(lines[0]) && /^\s*```\s*$/.test(lines[lines.length - 1])) {
     lines.shift();

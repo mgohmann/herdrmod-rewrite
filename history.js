@@ -1,10 +1,20 @@
-// history.js: Persistent JSON history store for Rewrite (capped at maxItems).
-import { mkdir, readFile, rename, writeFile } from "fs/promises";
+// history.js: Persistent JSON history store for Rewrite (capped at 1..100 items).
+// Uses only fs/promises functions supported by Herdr (mkdir, readFile, writeFile).
+import { mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 
 const HISTORY_FILE = "history.json";
 const DEFAULT_MAX_ITEMS = 20;
+const MAX_ITEMS_LIMIT = 100;
 const DEFAULT_MAX_CONTEXT_CHARS = 20000;
+
+let writeChain = Promise.resolve();
+
+export function clampMaxItems(maxItems = DEFAULT_MAX_ITEMS) {
+  const n = Number(maxItems);
+  if (!Number.isFinite(n)) return DEFAULT_MAX_ITEMS;
+  return Math.min(MAX_ITEMS_LIMIT, Math.max(1, Math.floor(n)));
+}
 
 export function createHistoryEntry({
   rewriteType,
@@ -20,10 +30,10 @@ export function createHistoryEntry({
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     createdAt: new Date().toISOString(),
-    rewriteType,
-    outputType,
-    harness,
-    model,
+    rewriteType: String(rewriteType ?? "default"),
+    outputType: String(outputType ?? "markdown"),
+    harness: String(harness ?? ""),
+    model: String(model ?? ""),
     context: ctx.length > maxContextChars ? ctx.slice(0, maxContextChars) : ctx,
     input: String(input ?? ""),
     output: String(output ?? ""),
@@ -31,7 +41,7 @@ export function createHistoryEntry({
 }
 
 export function addHistoryEntry(list, entry, maxItems = DEFAULT_MAX_ITEMS) {
-  const limit = Math.max(1, Number(maxItems) || DEFAULT_MAX_ITEMS);
+  const limit = clampMaxItems(maxItems);
   return [entry, ...(Array.isArray(list) ? list : [])].slice(0, limit);
 }
 
@@ -59,20 +69,46 @@ export function formatRelativeTime(isoString, now = Date.now()) {
 }
 
 export async function loadHistory(dir, maxItems = DEFAULT_MAX_ITEMS) {
-  const limit = Math.max(1, Number(maxItems) || DEFAULT_MAX_ITEMS);
+  const limit = clampMaxItems(maxItems);
   try {
     const raw = await readFile(join(dir, HISTORY_FILE), "utf8");
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.slice(0, limit) : [];
-  } catch {
+    if (!Array.isArray(parsed)) return [];
+    const seenIds = new Set();
+    const valid = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object" || typeof item.id !== "string" || typeof item.output !== "string") {
+        continue;
+      }
+      if (seenIds.has(item.id)) continue;
+      seenIds.add(item.id);
+      valid.push({
+        id: item.id,
+        createdAt: typeof item.createdAt === "string" ? item.createdAt : "",
+        rewriteType: typeof item.rewriteType === "string" ? item.rewriteType : "default",
+        outputType: typeof item.outputType === "string" ? item.outputType : "markdown",
+        harness: typeof item.harness === "string" ? item.harness : "",
+        model: typeof item.model === "string" ? item.model : "",
+        context: typeof item.context === "string" ? item.context : "",
+        input: typeof item.input === "string" ? item.input : "",
+        output: item.output,
+      });
+      if (valid.length >= limit) break;
+    }
+    return valid;
+  } catch (err) {
+    if (err?.code !== "ENOENT") {
+      console.warn(`Could not load rewrite history: ${err?.message ?? err}`);
+    }
     return [];
   }
 }
 
-export async function saveHistory(dir, items) {
-  await mkdir(dir, { recursive: true });
-  const target = join(dir, HISTORY_FILE);
-  const tmp = `${target}.tmp`;
-  await writeFile(tmp, JSON.stringify(items, null, 2), "utf8");
-  await rename(tmp, target);
+export function saveHistory(dir, items) {
+  const payload = JSON.stringify(items, null, 2);
+  writeChain = writeChain.then(async () => {
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, HISTORY_FILE), payload, "utf8");
+  });
+  return writeChain;
 }

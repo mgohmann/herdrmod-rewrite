@@ -233,11 +233,6 @@ export function MenuLabel(text) {
     .child(text);
 }
 
-export function MenuDivider() {
-  const t = theme();
-  return div().h(1).my(4).bg(t.border);
-}
-
 export function MenuOption({ id, label, detail, selected, onClick }) {
   const t = theme();
   return h_flex()

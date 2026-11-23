@@ -9,5 +9,25 @@
     "width": 1,
     "height": 1,
     "frame": "none"
+  },
+  "settings": {
+    "panel": {
+      "toggle": false
+    },
+    "history": {
+      "max_items": 20
+    },
+    "ai": {
+      "harness": "auto",
+      "effort": "low",
+      "timeout": "90s",
+      "max_input_chars": 24000,
+      "claude_model": "haiku",
+      "antigravity_model": "gemini-4-hydrogen",
+      "copilot_model": "gpt-6-luna",
+      "codex_model": "gpt-6-luna",
+      "opencode_model": "openrouter/openai/gpt-6-luna"
+    },
+    "rewrite_types": {}
   }
 }

@@ -67,7 +67,7 @@ export const OUTPUT_TYPES = {
 };
 
 export function resolveRewriteType(id, customTypes = {}) {
-  if (customTypes && customTypes[id]) {
+  if (customTypes && Object.hasOwn(customTypes, id)) {
     return {
       id,
       label: customTypes[id].label || id,
@@ -106,4 +106,24 @@ export function buildPrompt({ rewriteType, outputType, context = "", input, cust
   parts.push("", "Input to rewrite:", "---", trimmedInput, "---");
 
   return parts.join("\n");
+}
+
+// Builds a prompt bounded to `maxChars` by trimming context first, never the input.
+export function buildBoundedPrompt({ rewriteType, outputType, context = "", input, customRewriteTypes = {}, maxChars = 24000 }) {
+  const full = buildPrompt({ rewriteType, outputType, context, input, customRewriteTypes });
+  if (full.length <= maxChars) return { prompt: full, contextTruncated: false };
+
+  const baseWithoutContext = buildPrompt({ rewriteType, outputType, context: "", input, customRewriteTypes });
+  if (baseWithoutContext.length > maxChars) {
+    throw Error(`Input exceeds the ${maxChars.toLocaleString()} character prompt limit (${baseWithoutContext.length.toLocaleString()} chars).`);
+  }
+
+  const trimmedContext = String(context ?? "").trim();
+  const overhead = full.length - trimmedContext.length;
+  const budget = Math.max(0, maxChars - overhead - 20);
+  const clippedContext = budget > 0 ? `${trimmedContext.slice(0, budget).trimEnd()}\n[...truncated]` : "";
+  return {
+    prompt: buildPrompt({ rewriteType, outputType, context: clippedContext, input, customRewriteTypes }),
+    contextTruncated: true,
+  };
 }

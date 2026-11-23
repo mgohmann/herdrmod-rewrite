@@ -24,9 +24,10 @@ A standalone **Rewrite** panel mod for [Herdr](https://herdr.dev) that turns rou
 
 1. Copy this repository's mod files into your Herdr mods directory:
    ```powershell
-   Copy-Item -Recurse -Force C:\wd\herdrmod-rewrite "$env:USERPROFILE\.config\herdr-app\mods\rewrite"
+   $dest = "$env:USERPROFILE\.config\herdr-app\mods\rewrite"
+   New-Item -ItemType Directory -Force -Path $dest | Out-Null
+   Copy-Item -Path C:\wd\herdrmod-rewrite\* -Destination $dest -Recurse -Force -Exclude .git,tests,IMPLEMENTATION_PLAN.md
    ```
-   *(Exclude `.git`, `tests/`, `IMPLEMENTATION_PLAN.md`, and `ui-ideation.png` if you want a minimal install, though leaving them is harmless.)*
 
 2. Wire the mod into your Herdr layout (e.g. `estro.json`):
    - Add a tab button in `better-tabs` `props.buttons`:

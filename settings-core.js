@@ -1,6 +1,9 @@
 // settings-core.js: Pure duration parsing and settings deep-merge helpers.
 
 const UNITS = { ms: 1, s: 1000, m: 60000, h: 3600000 };
+const VALID_HARNESSES = new Set(["auto", "claude", "antigravity", "copilot", "codex", "opencode"]);
+const VALID_EFFORTS = new Set(["low", "medium", "high"]);
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 export function duration(value, fallback) {
   if (typeof value === "number") return value > 0 ? value : fallback;
@@ -17,24 +20,36 @@ export function mergeSettings(defaults, given, problems = [], path = "") {
     return result;
   }
   for (const [key, value] of Object.entries(given)) {
+    if (FORBIDDEN_KEYS.has(key)) continue;
     const name = path ? `${path}.${key}` : key;
     if (path === "rewrite_types") {
-      if (isObject(value) && typeof value.label === "string" && typeof value.prompt === "string") {
-        result[key] = { label: value.label, prompt: value.prompt };
+      if (isObject(value) && typeof value.label === "string" && value.label.trim() && typeof value.prompt === "string" && value.prompt.trim()) {
+        result[key] = { label: value.label.trim(), prompt: value.prompt.trim() };
       } else {
-        problems.push(`${name} must have string label and prompt`);
+        problems.push(`${name} must have non-empty string label and prompt`);
       }
       continue;
     }
-    if (!(key in defaults)) {
+    if (!Object.hasOwn(defaults, key)) {
       problems.push(`${name} is not a setting`);
       continue;
     }
     const current = defaults[key];
-    if (isObject(current)) result[key] = mergeSettings(current, value, problems, name);
-    else if (typeof value === typeof current || (typeof current === "string" && typeof value === "number"))
-      result[key] = value;
-    else problems.push(`${name} should be a ${typeof current}`);
+    if (isObject(current)) {
+      result[key] = mergeSettings(current, value, problems, name);
+    } else if (typeof value === typeof current || (typeof current === "string" && typeof value === "number")) {
+      if (name === "ai.harness" && !VALID_HARNESSES.has(value)) {
+        problems.push(`${name} must be one of ${[...VALID_HARNESSES].join(", ")}`);
+      } else if (name === "ai.effort" && !VALID_EFFORTS.has(value)) {
+        problems.push(`${name} must be one of ${[...VALID_EFFORTS].join(", ")}`);
+      } else if (name === "history.max_items") {
+        result[key] = Math.min(100, Math.max(1, Math.floor(Number(value) || 20)));
+      } else {
+        result[key] = value;
+      }
+    } else {
+      problems.push(`${name} should be a ${typeof current}`);
+    }
   }
   return result;
 }

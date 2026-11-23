@@ -1,4 +1,5 @@
 // views/panel.js: Main Rewrite sidebar panel layout and interactions.
+import { platform } from "os";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme } from "herdr";
@@ -269,6 +270,8 @@ export const panelMethods = {
   renderInputSection() {
     const t = theme();
     const canSubmit = Boolean(this.inputText.trim()) && !this.busy;
+    const shortcutHint = platform() === "darwin" ? "Cmd+Enter" : "Ctrl+Enter";
+    const busyLabel = `Rewriting with ${this.harnessLabel(this.harness)}...`;
     return v_flex()
       .flex_none()
       .gap(6)
@@ -283,7 +286,7 @@ export const panelMethods = {
               .text_color(t.muted)
               .child("Rewrite this"),
           )
-          .child(div().text_size(TEXT.badge).text_color(t.dim).child("Ctrl+Enter")),
+          .child(div().text_size(TEXT.badge).text_color(t.dim).child(shortcutHint)),
       )
       .child(
         TextBox({
@@ -308,7 +311,7 @@ export const panelMethods = {
             ActionButton({
               id: "rewrite-submit",
               icon: "sparkle",
-              label: this.busy ? "Rewriting..." : "Rewrite",
+              label: this.busy ? busyLabel : "Rewrite",
               enabled: canSubmit,
               spinning: this.busy,
               onClick: (cx) => this.runRewrite(cx),
@@ -409,6 +412,9 @@ export const panelMethods = {
       .when(this.history.length > 0, (el) =>
         el.child(
           v_flex()
+            .id("history-list")
+            .max_h(260)
+            .overflow_y_scrollbar()
             .gap(6)
             .children(this.history.map((item) => this.renderHistoryItem(item))),
         ),
@@ -489,7 +495,7 @@ export const panelMethods = {
                 .text_size(TEXT.small)
                 .whitespace_normal()
                 .text_color(t.foreground)
-                .child(item.output),
+                .child(String(item.output ?? "")),
             )
             .child(
               h_flex()

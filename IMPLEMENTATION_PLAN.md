@@ -18,17 +18,24 @@
 C:\wd\herdrmod-rewrite\
 ├── IMPLEMENTATION_PLAN.md   # This design spec & phased plan
 ├── README.md                # Installation, layout wiring, and configuration docs
-├── ui-ideation.png          # Initial UI wireframe reference
+├── LICENSE                  # MIT License
+├── THIRD_PARTY_NOTICES.md   # Apache-2.0 & ISC provenance notices
 ├── mod.json                 # Herdr mod manifest (place: "right", size: 368, default settings)
 ├── mod.schema.json          # JSON Schema (draft 2020-12) for editor validation & better-config UI
-├── jsconfig.json            # Editor/LSP config referencing gpui-kit.d.ts
+├── jsconfig.json            # Editor/LSP config
 ├── main.js                  # RewriteView (extends View), state lifecycle, commands, overlay panel key
-├── settings.js              # Deep-merge mod.json settings over defaults (same pattern as better-changes)
+├── settings.js              # Mod settings loader (reads mod.json)
+├── settings-core.js         # Pure duration parser & settings deep-merge
 ├── panel.js                 # Layout open/toggle helper for mod.open:rewrite keybinding
-├── ai.js                    # Multi-harness non-interactive CLI runner & response cleaner
-├── prompts.js               # Built-in Rewrite Types, Output Types, and prompt builder
+├── ai.js                    # Multi-harness non-interactive CLI runner
+├── ai-core.js               # Pure harness definitions, selection order & output cleaner
+├── prompts.js               # Built-in Rewrite Types, Output Types, and bounded prompt builder
+├── format.js                # Pure Markdown -> Outlook HTML, plain text & CF_HTML builder
 ├── clipboard.js             # Plain-text copy + Windows CF_HTML rich-text copy for Outlook
-├── history.js               # Persistent JSON history store (capped at 20 items)
+├── copy-rich.ps1            # Windows DataObject helper for CF_HTML + UnicodeText
+├── history.js               # Persistent JSON history store (capped at 1..100 items)
+├── tests/
+│   └── rewrite.test.mjs     # Node unit test suite for pure modules
 ├── views/
 │   ├── panel.js             # Main sidebar UI (controls, context, input, output, history)
 │   └── ui.js                # Herdr-native GPUI primitives (Panel, Popover dropdowns, IconButton, etc.)
@@ -41,8 +48,7 @@ C:\wd\herdrmod-rewrite\
     ├── chevron-right.svg    # Collapsed sections
     ├── refresh.svg          # Re-rewrite / iterate
     ├── undo.svg             # Load history item back into editor
-    ├── trash.svg            # Delete history item / Clear
-    └── settings.svg         # Harness / options menu
+    └── trash.svg            # Delete history item / Clear
 ```
 
 ---

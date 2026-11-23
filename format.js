@@ -14,7 +14,6 @@ export function escapeHtml(text) {
 
 function renderInline(text) {
   let out = escapeHtml(text);
-  // Inline code first so markers inside backticks aren't styled.
   const codeSpans = [];
   out = out.replace(/`([^`]+)`/g, (_m, code) => {
     const idx = codeSpans.length;
@@ -24,7 +23,6 @@ function renderInline(text) {
     return `\x00CODE${idx}\x00`;
   });
 
-  // Links [label](url) — allow only safe schemes.
   out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label, url) => {
     if (!/^(https?:|mailto:)/i.test(url)) return label;
     return `<a href="${url}" style="color:#0f6cbd;text-decoration:underline;">${label}</a>`;
@@ -38,13 +36,23 @@ function renderInline(text) {
   return out.replace(/\x00CODE(\d+)\x00/g, (_m, i) => codeSpans[Number(i)]);
 }
 
+function formatBullet(raw) {
+  const task = /^\[( |x|X)\]\s+(.*)$/.exec(raw);
+  return task
+    ? `${task[1].toLowerCase() === "x" ? "☑" : "☐"} ${renderInline(task[2])}`
+    : renderInline(raw);
+}
+
 export function markdownToHtml(markdown) {
   const lines = String(markdown ?? "").replace(/\r\n?/g, "\n").split("\n");
   const html = [];
   let inCode = false;
   let codeLines = [];
   let listType = null; // "ul" | "ol"
+  let nestedUlOpen = false;
+  let liOpen = false;
   let para = [];
+  let quoteLines = [];
 
   const flushPara = () => {
     if (!para.length) return;
@@ -52,7 +60,27 @@ export function markdownToHtml(markdown) {
     para = [];
   };
 
+  const flushQuote = () => {
+    if (!quoteLines.length) return;
+    html.push(
+      `<blockquote style="margin:0 0 8px 0;padding:4px 10px;border-left:3px solid #d1d5db;color:#4b5563;">${quoteLines.map(renderInline).join("<br>")}</blockquote>`,
+    );
+    quoteLines = [];
+  };
+
+  const closeNested = () => {
+    if (nestedUlOpen) {
+      html.push("</ul>");
+      nestedUlOpen = false;
+    }
+    if (liOpen) {
+      html.push("</li>");
+      liOpen = false;
+    }
+  };
+
   const closeList = () => {
+    closeNested();
     if (!listType) return;
     html.push(`</${listType}>`);
     listType = null;
@@ -61,6 +89,7 @@ export function markdownToHtml(markdown) {
   for (const line of lines) {
     if (/^\s*```/.test(line)) {
       flushPara();
+      flushQuote();
       closeList();
       if (inCode) {
         html.push(
@@ -81,9 +110,19 @@ export function markdownToHtml(markdown) {
 
     if (!line.trim()) {
       flushPara();
+      flushQuote();
       closeList();
       continue;
     }
+
+    const quote = /^>\s?(.*)$/.exec(line);
+    if (quote) {
+      flushPara();
+      closeList();
+      quoteLines.push(quote[1]);
+      continue;
+    }
+    flushQuote();
 
     if (/^\s*([-*_])\1{2,}\s*$/.test(line)) {
       flushPara();
@@ -104,33 +143,33 @@ export function markdownToHtml(markdown) {
       continue;
     }
 
-    const quote = /^>\s?(.*)$/.exec(line);
-    if (quote) {
-      flushPara();
-      closeList();
-      html.push(
-        `<blockquote style="margin:0 0 8px 0;padding:4px 10px;border-left:3px solid #d1d5db;color:#4b5563;">${renderInline(quote[1])}</blockquote>`,
-      );
-      continue;
-    }
-
-    const ul = /^\s*[-*+]\s+(.*)$/.exec(line);
+    const ul = /^(\s*)[-*+]\s+(.*)$/.exec(line);
     if (ul) {
       flushPara();
+      const indented = ul[1].length >= 2;
+      if (indented && listType === "ul" && liOpen) {
+        if (!nestedUlOpen) {
+          html.push('<ul style="margin:2px 0 2px 0;padding-left:18px;">');
+          nestedUlOpen = true;
+        }
+        html.push(`<li style="margin:2px 0;">${formatBullet(ul[2])}</li>`);
+        continue;
+      }
+      closeNested();
       if (listType !== "ul") {
         closeList();
         listType = "ul";
         html.push('<ul style="margin:0 0 8px 0;padding-left:20px;">');
       }
-      const task = /^\[( |x|X)\]\s+(.*)$/.exec(ul[1]);
-      const content = task ? `${task[1].toLowerCase() === "x" ? "☑" : "☐"} ${renderInline(task[2])}` : renderInline(ul[1]);
-      html.push(`<li style="margin:2px 0;">${content}</li>`);
+      html.push(`<li style="margin:2px 0;">${formatBullet(ul[2])}`);
+      liOpen = true;
       continue;
     }
 
     const ol = /^\s*\d+[.)]\s+(.*)$/.exec(line);
     if (ol) {
       flushPara();
+      closeNested();
       if (listType !== "ol") {
         closeList();
         listType = "ol";
@@ -150,6 +189,7 @@ export function markdownToHtml(markdown) {
     );
   }
   flushPara();
+  flushQuote();
   closeList();
 
   return `<div style="font-family:Calibri,'Segoe UI',Arial,sans-serif;font-size:11pt;line-height:1.45;">${html.join("")}</div>`;
@@ -159,16 +199,45 @@ export function markdownToPlainText(markdown) {
   return String(markdown ?? "")
     .replace(/\r\n?/g, "\n")
     .replace(/^\s*```[a-zA-Z0-9_-]*\s*$/gm, "")
+    .replace(/^\s*([-*_])\1{2,}\s*$/gm, "")
     .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^(\s*)[*+]\s+/gm, "$1- ")
+    .replace(/^(\s*-\s+)\[( |x|X)\]\s+/gm, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
+    .replace(/(^|[^\w*])\*([^*]+)\*(?=[^\w*]|$)/g, "$1$2")
+    .replace(/(^|[^\w_])_([^_]+)_(?=[^\w_]|$)/g, "$1$2")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 ($2)")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-const utf8Length = (str) => new TextEncoder().encode(str).length;
+// Pure UTF-8 byte counter (no TextEncoder dependency for QuickJS compatibility).
+export function utf8Length(str) {
+  let bytes = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code <= 0x7f) {
+      bytes += 1;
+    } else if (code <= 0x7ff) {
+      bytes += 2;
+    } else if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
+      const next = str.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        i++;
+      } else {
+        bytes += 3;
+      }
+    } else {
+      bytes += 3;
+    }
+  }
+  return bytes;
+}
+
 const pad10 = (n) => String(n).padStart(10, "0");
 
 // Builds a Windows CF_HTML clipboard payload with exact UTF-8 byte offsets.

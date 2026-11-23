@@ -109,9 +109,10 @@
             },
             "max_input_chars": {
               "title": "Max prompt characters",
-              "description": "Prompts longer than this are passed via a prompt file when supported.",
+              "description": "Prompts longer than this trim Context first (preserving Input) to stay under Windows' ~32K CLI limit.",
               "type": "integer",
               "minimum": 1000,
+              "maximum": 28000,
               "x-step": 1000,
               "default": 24000
             },
