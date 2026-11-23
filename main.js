@@ -1,7 +1,8 @@
 // main.js: Entry point for the Rewrite Herdr mod.
+import { platform } from "os";
 import { View } from "gpui-kit";
 import { TextareaState } from "gpui-base";
-import { props, nextCommand, layout, run, notify, closeOverlay, appHome } from "herdr";
+import { props, nextCommand, layout, run, notify, closeOverlay, appHome, readTextFile, writeTextFile } from "herdr";
 import { loadSettings } from "./settings.js";
 import { panelCommands } from "./panel.js";
 import { REWRITE_TYPES, OUTPUT_TYPES, buildBoundedPrompt } from "./prompts.js";
@@ -47,6 +48,8 @@ const STORAGE = {
   contextOpen: "rewrite.context-open",
 };
 
+const HISTORY_IO = { readText: readTextFile, writeText: writeTextFile };
+
 class RewriteView extends View {
   init(given, cx) {
     const p = props() ?? given ?? {};
@@ -57,9 +60,11 @@ class RewriteView extends View {
     }
 
     this.mode = p.mode ?? "sidebar";
+    this.isMac = platform() === "darwin";
     this.settings = DEFAULT_SETTINGS;
     this.busy = false;
     this.inputRevision = 0;
+    this.copySeq = 0;
     this.error = null;
     this.note = null;
     this.copiedAt = 0;
@@ -67,6 +72,7 @@ class RewriteView extends View {
     this.history = [];
     this.expandedHistoryId = null;
     this.confirmClearHistory = false;
+    this.historyLoaded = Promise.resolve();
 
     this.rewriteType = localStorage.getItem(STORAGE.rewriteType) ?? "default";
     this.outputType = localStorage.getItem(STORAGE.outputType) ?? "markdown";
@@ -145,24 +151,31 @@ class RewriteView extends View {
   }
 
   applySettings(cx) {
+    let resolveLoaded;
+    this.historyLoaded = new Promise((res) => {
+      resolveLoaded = res;
+    });
     cx.spawn(async (cx) => {
-      const { settings, problems } = await loadSettings("rewrite", DEFAULT_SETTINGS);
-      for (const problem of problems) console.warn(`rewrite mod.json settings: ${problem}`);
-      this.settings = settings;
+      try {
+        const { settings, problems } = await loadSettings("rewrite", DEFAULT_SETTINGS);
+        for (const problem of problems) console.warn(`rewrite mod.json settings: ${problem}`);
+        this.settings = settings;
 
-      const storedHarness = localStorage.getItem(STORAGE.harness);
-      if ((!storedHarness || storedHarness === "auto") && settings.ai?.harness) {
-        this.harness = settings.ai.harness;
-      }
+        if (localStorage.getItem(STORAGE.harness) === null && settings.ai?.harness) {
+          this.harness = settings.ai.harness;
+        }
 
-      const maxItems = settings.history?.max_items ?? 20;
-      const loaded = await loadHistory(`${appHome()}/data/rewrite`, maxItems);
-      if (loaded.length) {
-        const existingIds = new Set(this.history.map((h) => h.id));
-        const merged = [...this.history, ...loaded.filter((h) => !existingIds.has(h.id))];
-        this.history = merged.slice(0, maxItems);
+        const maxItems = settings.history?.max_items ?? 20;
+        const loaded = await loadHistory(`${appHome()}/data/rewrite`, maxItems, HISTORY_IO);
+        if (loaded.length) {
+          const existingIds = new Set(this.history.map((h) => h.id));
+          const merged = [...this.history, ...loaded.filter((h) => !existingIds.has(h.id))];
+          this.history = merged.slice(0, maxItems);
+        }
+        cx.notify();
+      } finally {
+        resolveLoaded();
       }
-      cx.notify();
     });
   }
 
@@ -226,8 +239,7 @@ class RewriteView extends View {
 
   setHarness(id, cx) {
     this.harness = id;
-    if (id === "auto") localStorage.removeItem(STORAGE.harness);
-    else localStorage.setItem(STORAGE.harness, id);
+    localStorage.setItem(STORAGE.harness, id);
     cx.notify();
   }
 
@@ -271,11 +283,12 @@ class RewriteView extends View {
 
   copyOutput(cx, text = this.outputText, outputType = this.outputType) {
     if (!String(text ?? "").trim()) return;
-    const token = Date.now();
+    const token = ++this.copySeq;
     cx.spawn(async (cx) => {
       try {
         const res = await copyFormatted(text, outputType, cx);
         this.copiedAt = token;
+        this.error = null;
         if (res.fallback) {
           this.note = "Rich copy unavailable; copied plain text instead.";
         }
@@ -307,7 +320,7 @@ class RewriteView extends View {
     if (!raw || this.busy) return;
 
     const aiSettings = this.settings?.ai ?? DEFAULT_SETTINGS.ai;
-    const maxChars = Math.max(1000, aiSettings.max_input_chars ?? 24000);
+    const maxChars = Math.min(28000, Math.max(1000, aiSettings.max_input_chars ?? 24000));
     let built;
     try {
       built = buildBoundedPrompt({
@@ -348,7 +361,9 @@ class RewriteView extends View {
           output: result.text,
         });
         if (this.inputRevision !== revision) {
-          this.note = "Input changed while rewriting; result saved to history.";
+          this.note = historySaved
+            ? "Input changed while rewriting; result saved to history."
+            : "Input changed while rewriting; history save failed.";
           return;
         }
         this.outputText = result.text;
@@ -368,11 +383,12 @@ class RewriteView extends View {
   }
 
   async recordHistory(entryData) {
+    await this.historyLoaded;
     const maxItems = this.settings?.history?.max_items ?? 20;
     const entry = createHistoryEntry(entryData);
     this.history = addHistoryEntry(this.history, entry, maxItems);
     try {
-      await saveHistory(`${appHome()}/data/rewrite`, this.history);
+      await saveHistory(`${appHome()}/data/rewrite`, this.history, HISTORY_IO);
       return true;
     } catch (error) {
       console.warn(`Failed to save rewrite history: ${error.message}`);
@@ -387,16 +403,19 @@ class RewriteView extends View {
 
   copyHistoryItem(item, cx) {
     if (!String(item?.output ?? "").trim()) return;
+    const token = ++this.copySeq;
     cx.spawn(async (cx) => {
       try {
         const res = await copyFormatted(item.output, item.outputType, cx);
         this.copiedHistoryId = item.id;
+        this.copiedHistoryToken = token;
+        this.error = null;
         if (res.fallback) {
           this.note = "Rich copy unavailable; copied plain text instead.";
         }
         cx.notify();
         cx.timer.after(1500, (cx) => {
-          if (this.copiedHistoryId === item.id) {
+          if (this.copiedHistoryToken === token) {
             this.copiedHistoryId = null;
             cx.notify();
           }
@@ -442,7 +461,8 @@ class RewriteView extends View {
     cx.notify();
     cx.spawn(async (cx) => {
       try {
-        await saveHistory(`${appHome()}/data/rewrite`, this.history);
+        await this.historyLoaded;
+        await saveHistory(`${appHome()}/data/rewrite`, this.history, HISTORY_IO);
       } catch (e) {
         this.note = `Failed to save history: ${e.message}`;
         cx.notify();
@@ -469,7 +489,8 @@ class RewriteView extends View {
     cx.notify();
     cx.spawn(async (cx) => {
       try {
-        await saveHistory(`${appHome()}/data/rewrite`, []);
+        await this.historyLoaded;
+        await saveHistory(`${appHome()}/data/rewrite`, [], HISTORY_IO);
       } catch (e) {
         this.note = `Failed to clear history: ${e.message}`;
         cx.notify();

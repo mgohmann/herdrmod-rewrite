@@ -43,6 +43,8 @@ test("prompts: resolves built-in and custom rewrite types", () => {
   assert.match(prompt, /Outlook Rich Text/);
   assert.match(prompt, /Q1: Timeline\?/);
   assert.match(prompt, /we ship friday/);
+  assert.equal(resolveRewriteType("toString").id, "default");
+  assert.equal(resolveOutputType("constructor").id, "markdown");
 });
 
 test("prompts: buildBoundedPrompt trims context first and preserves input", () => {
@@ -101,6 +103,9 @@ test("format: markdownToHtml supports nested lists, merged quotes, and valid UTF
     "  - Sub-item one",
     "  - [ ] Sub-task",
     "- [x] Done with `v1` & [docs](https://herdr.dev)",
+    "1. Question one",
+    "  - Nested answer point",
+    "2. Question two",
     "> Quote line 1",
     "> Quote line 2",
   ].join("\n");
@@ -108,6 +113,7 @@ test("format: markdownToHtml supports nested lists, merged quotes, and valid UTF
   assert.match(html, /<h2[^>]*>Update — 🚀<\/h2>/);
   assert.match(html, /<strong>Status<\/strong>/);
   assert.match(html, /<ul[^>]*><li[^>]*>Sub-item one<\/li><li[^>]*>☐ Sub-task<\/li><\/ul><\/li>/);
+  assert.match(html, /<ol[^>]*><li[^>]*>Question one<ul[^>]*><li[^>]*>Nested answer point<\/li><\/ul><\/li><li[^>]*>Question two<\/li><\/ol>/);
   assert.match(html, /☑ Done with <code[^>]*>v1<\/code> &amp; <a href="https:\/\/herdr\.dev"/);
   assert.match(html, /<blockquote[^>]*>Quote line 1<br>Quote line 2<\/blockquote>/);
 
@@ -174,6 +180,14 @@ test("history: clamps maxItems, validates loaded JSON, and persists to disk", as
 
     const trimmed = removeHistoryEntry(loaded, loaded[0].id);
     assert.equal(trimmed.length, 19);
+
+    // Failed save must not poison subsequent saves.
+    const blocker = join(dir, "blocked");
+    await writeFile(blocker, "file", "utf8");
+    await assert.rejects(() => saveHistory(blocker, trimmed));
+    await saveHistory(dir, trimmed);
+    const recovered = await loadHistory(dir, 20);
+    assert.equal(recovered.length, 19);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -225,16 +239,17 @@ test("settings-core: validates enums, clamps history.max_items, and blocks __pro
 
   const problems = [];
   const parsed = JSON.parse(
-    '{"ai":{"effort":"high","harness":"bogus-agent"},"history":{"max_items":500},"rewrite_types":{"short":{"label":"Short","prompt":"Be brief."},"broken":{"label":"","prompt":"x"}},"__proto__":{"polluted":true}}',
+    '{"ai":{"effort":"high","harness":"bogus-agent","max_input_chars":99999},"history":{"max_items":0},"rewrite_types":{"short":{"label":"Short","prompt":"Be brief."},"broken":{"label":"","prompt":"x"}},"__proto__":{"polluted":true}}',
   );
   const merged = mergeSettings(
-    { ai: { effort: "low", harness: "auto" }, history: { max_items: 20 }, rewrite_types: {} },
+    { ai: { effort: "low", harness: "auto", max_input_chars: 24000 }, history: { max_items: 20 }, rewrite_types: {} },
     parsed,
     problems,
   );
   assert.equal(merged.ai.effort, "high");
   assert.equal(merged.ai.harness, "auto");
-  assert.equal(merged.history.max_items, 100);
+  assert.equal(merged.ai.max_input_chars, 28000);
+  assert.equal(merged.history.max_items, 1);
   assert.equal(merged.rewrite_types.short.label, "Short");
   assert.equal(merged.rewrite_types.broken, undefined);
   assert.equal(({}).polluted, undefined);

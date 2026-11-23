@@ -1,5 +1,4 @@
 // history.js: Persistent JSON history store for Rewrite (capped at 1..100 items).
-// Uses only fs/promises functions supported by Herdr (mkdir, readFile, writeFile).
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -68,10 +67,12 @@ export function formatRelativeTime(isoString, now = Date.now()) {
   return `${diffDay}d ago`;
 }
 
-export async function loadHistory(dir, maxItems = DEFAULT_MAX_ITEMS) {
+export async function loadHistory(dir, maxItems = DEFAULT_MAX_ITEMS, io = null) {
   const limit = clampMaxItems(maxItems);
+  const path = join(dir, HISTORY_FILE);
   try {
-    const raw = await readFile(join(dir, HISTORY_FILE), "utf8");
+    const raw = io?.readText ? await io.readText(path) : await readFile(path, "utf8");
+    if (raw === null || raw === undefined) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const seenIds = new Set();
@@ -104,11 +105,20 @@ export async function loadHistory(dir, maxItems = DEFAULT_MAX_ITEMS) {
   }
 }
 
-export function saveHistory(dir, items) {
+export function saveHistory(dir, items, io = null) {
   const payload = JSON.stringify(items, null, 2);
-  writeChain = writeChain.then(async () => {
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, HISTORY_FILE), payload, "utf8");
-  });
-  return writeChain;
+  const path = join(dir, HISTORY_FILE);
+  const next = writeChain
+    .catch(() => {})
+    .then(async () => {
+      await mkdir(dir, { recursive: true });
+      if (io?.readText && io?.writeText) {
+        const expected = await io.readText(path).catch(() => null);
+        await io.writeText(path, payload, expected);
+      } else {
+        await writeFile(path, payload, "utf8");
+      }
+    });
+  writeChain = next;
+  return next;
 }

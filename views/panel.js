@@ -1,5 +1,4 @@
 // views/panel.js: Main Rewrite sidebar panel layout and interactions.
-import { platform } from "os";
 import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { theme } from "herdr";
@@ -270,8 +269,9 @@ export const panelMethods = {
   renderInputSection() {
     const t = theme();
     const canSubmit = Boolean(this.inputText.trim()) && !this.busy;
-    const shortcutHint = platform() === "darwin" ? "Cmd+Enter" : "Ctrl+Enter";
-    const busyLabel = `Rewriting with ${this.harnessLabel(this.harness)}...`;
+    const shortcutHint = this.isMac ? "Cmd+Enter" : "Ctrl+Enter";
+    const busyLabel =
+      this.harness === "auto" ? "Rewriting..." : `Rewriting with ${this.harnessLabel(this.harness)}...`;
     return v_flex()
       .flex_none()
       .gap(6)

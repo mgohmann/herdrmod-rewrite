@@ -2,7 +2,7 @@
 // Runs once in a neutral folder (appHome()/data/rewrite) with tools disabled so
 // the coding agent never inspects or modifies any repository.
 import { mkdir, unlink } from "fs/promises";
-import { exec, panes, spaces, appHome, readTextFile, writeTextFile } from "herdr";
+import { exec, panes, spaces, appHome, writeTextFile } from "herdr";
 import { duration } from "./settings-core.js";
 import { HARNESSES, HARNESS_ORDER, harnessOrder, cleanOutput } from "./ai-core.js";
 
@@ -15,9 +15,8 @@ async function dataDir() {
 }
 
 async function writePromptFile(dir, text) {
-  const path = `${dir}/prompt-${Date.now()}.txt`;
-  const existing = await readTextFile(path).catch(() => null);
-  await writeTextFile(path, text, existing);
+  const path = `${dir}/prompt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.txt`;
+  await writeTextFile(path, text, null);
   return path;
 }
 

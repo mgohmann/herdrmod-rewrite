@@ -14,6 +14,7 @@ A standalone **Rewrite** panel mod for [Herdr](https://herdr.dev) that turns rou
 - **Multi-Harness AI Runner:**
   - `Auto` mode detects the coding agent running in your active Herdr tab, falling back across `claude`, `antigravity` (`agy`), `copilot`, `codex`, and `opencode`.
   - Defaults to `low` reasoning effort and lightweight models (`haiku`, `gemini-4-hydrogen`, `gpt-6-luna`).
+  - `max_input_chars` defaults to `24000` (clamped `1000..28000` for Windows CLI limits); long Context is trimmed first so your Input is preserved, and oversized Input alone is rejected cleanly.
 - **Editable Output & Iteration:**
   - Tweak rewritten text inline, click **Re-rewrite** to iterate, or toggle **Auto-copy** on completion.
   - `Ctrl+Enter` / `Cmd+Enter` triggers a rewrite from the input box.

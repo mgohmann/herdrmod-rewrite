@@ -166,7 +166,7 @@ Reuses and extends the proven architecture from `better-changes/ai.js`:
 ### Execution Details
 - **Harness resolution (`auto`):** Inspects terminals in the active Herdr tab (focused pane first) to match the running agent, then falls back through the configured order (`["claude", "antigravity", "copilot", "codex", "opencode"]`). If the user picks a specific harness in the UI or `mod.json`, only that harness is used.
 - **Neutral working directory:** Runs `exec(...)` with `cwd: "${appHome()}/data/rewrite"` (directory created on first use) so the CLI never reads project files or `.git`.
-- **Prompt length & Windows safety:** Prompts exceeding a configurable threshold (e.g., `24000` chars) or harnesses with `.cmd` shims (`needsFile: true`) pass the prompt via a temp file (`appHome()/data/rewrite/prompt.txt`) or stdin where supported, avoiding Windows' ~32K command-line limit.
+- **Prompt length & Windows safety:** Prompts are bounded by `max_input_chars` (default `24000`, max `28000`) to stay safely under Windows' ~32K command-line limit; if exceeded, Context is trimmed first so the user's Input is preserved (oversized Input alone is rejected with an error). OpenCode (`needsFile: true`) receives its prompt via a temp file that is deleted after execution.
 - **Response hygiene (`cleanOutput`):** Strips ANSI escape codes, carriage returns, OpenCode banners (`> agent · model`), and accidental outer markdown fences (` ``` `) if the AI wraps the entire response, while preserving internal formatting and code blocks.
 - **Settings in `mod.json`:** All harness models, effort (`low` default), timeout (`90s` default), and `max_input_chars` live under `settings.ai` with full `mod.schema.json` definitions so they are editable in both JSON and `better-config`.
 

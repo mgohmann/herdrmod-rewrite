@@ -147,7 +147,7 @@ export function markdownToHtml(markdown) {
     if (ul) {
       flushPara();
       const indented = ul[1].length >= 2;
-      if (indented && listType === "ul" && liOpen) {
+      if (indented && (listType === "ul" || listType === "ol") && liOpen) {
         if (!nestedUlOpen) {
           html.push('<ul style="margin:2px 0 2px 0;padding-left:18px;">');
           nestedUlOpen = true;
@@ -175,7 +175,8 @@ export function markdownToHtml(markdown) {
         listType = "ol";
         html.push('<ol style="margin:0 0 8px 0;padding-left:20px;">');
       }
-      html.push(`<li style="margin:2px 0;">${renderInline(ol[1])}</li>`);
+      html.push(`<li style="margin:2px 0;">${renderInline(ol[1])}`);
+      liOpen = true;
       continue;
     }
 

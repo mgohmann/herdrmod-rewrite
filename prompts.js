@@ -75,11 +75,11 @@ export function resolveRewriteType(id, customTypes = {}) {
       prompt: customTypes[id].prompt,
     };
   }
-  return REWRITE_TYPES[id] ?? REWRITE_TYPES.default;
+  return Object.hasOwn(REWRITE_TYPES, id) ? REWRITE_TYPES[id] : REWRITE_TYPES.default;
 }
 
 export function resolveOutputType(id) {
-  return OUTPUT_TYPES[id] ?? OUTPUT_TYPES.markdown;
+  return Object.hasOwn(OUTPUT_TYPES, id) ? OUTPUT_TYPES[id] : OUTPUT_TYPES.markdown;
 }
 
 export function buildPrompt({ rewriteType, outputType, context = "", input, customRewriteTypes = {} }) {

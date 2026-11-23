@@ -1,7 +1,8 @@
 // settings-core.js: Pure duration parsing and settings deep-merge helpers.
+import { HARNESS_ORDER } from "./ai-core.js";
 
 const UNITS = { ms: 1, s: 1000, m: 60000, h: 3600000 };
-const VALID_HARNESSES = new Set(["auto", "claude", "antigravity", "copilot", "codex", "opencode"]);
+const VALID_HARNESSES = new Set(["auto", ...HARNESS_ORDER]);
 const VALID_EFFORTS = new Set(["low", "medium", "high"]);
 const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
@@ -43,7 +44,11 @@ export function mergeSettings(defaults, given, problems = [], path = "") {
       } else if (name === "ai.effort" && !VALID_EFFORTS.has(value)) {
         problems.push(`${name} must be one of ${[...VALID_EFFORTS].join(", ")}`);
       } else if (name === "history.max_items") {
-        result[key] = Math.min(100, Math.max(1, Math.floor(Number(value) || 20)));
+        const n = Number(value);
+        result[key] = Number.isFinite(n) ? Math.min(100, Math.max(1, Math.floor(n))) : 20;
+      } else if (name === "ai.max_input_chars") {
+        const n = Number(value);
+        result[key] = Number.isFinite(n) ? Math.min(28000, Math.max(1000, Math.floor(n))) : 24000;
       } else {
         result[key] = value;
       }
